@@ -1,3 +1,4 @@
+require 'acdc'
 
 local LSTM = {}
 function LSTM.lstm(input_size, rnn_size, n, dropout)
@@ -26,19 +27,28 @@ function LSTM.lstm(input_size, rnn_size, n, dropout)
       if dropout > 0 then x = nn.Dropout(dropout)(x) end -- apply dropout, if any
       input_size_L = rnn_size
     end
-    -- evaluate the input sums at once for efficiency
-    local i2h = nn.Linear(input_size_L, 4 * rnn_size)(x):annotate{name='i2h_'..L}
-    local h2h = nn.Linear(rnn_size, 4 * rnn_size)(prev_h):annotate{name='h2h_'..L}
-    local all_input_sums = nn.CAddTable()({i2h, h2h})
+    -- local i2h = nn.Linear(input_size_L, 4 * rnn_size)(x):annotate{name='i2h_'..L}
+    -- local h2h = nn.Linear(rnn_size, 4 * rnn_size)(prev_h):annotate{name='h2h_'..L}
+    -- local all_input_sums = nn.CAddTable()({i2h, h2h})
+    -- local i2h_1 = acdc.FastACDC(rnn_size)(x)
+    local i2h_1 = nn.Linear(input_size_L, rnn_size)(x)
+    local i2h_2 = nn.Linear(input_size_L, rnn_size)(x)
+    local i2h_3 = nn.Linear(input_size_L, rnn_size)(x)
+    local i2h_4 = nn.Linear(input_size_L, rnn_size)(x)
+    local h2h_1 = acdc.FastACDC(rnn_size)(prev_h)
+    local h2h_2 = acdc.FastACDC(rnn_size)(prev_h)
+    local h2h_3 = acdc.FastACDC(rnn_size)(prev_h)
+    local h2h_4 = acdc.FastACDC(rnn_size)(prev_h)
 
-    local reshaped = nn.Reshape(4, rnn_size)(all_input_sums)
-    local n1, n2, n3, n4 = nn.SplitTable(2)(reshaped):split(4)
     -- decode the gates
-    local in_gate = nn.Sigmoid()(n1)
-    local forget_gate = nn.Sigmoid()(n2)
-    local out_gate = nn.Sigmoid()(n3)
-    -- decode the write inputs
-    local in_transform = nn.Tanh()(n4)
+    local gates_1 = nn.CAddTable()({i2h_1, h2h_1})
+    local gates_2 = nn.CAddTable()({i2h_2, h2h_2})
+    local gates_3 = nn.CAddTable()({i2h_3, h2h_3})
+    local gates_4 = nn.CAddTable()({i2h_4, h2h_4})
+    local in_gate          = nn.Sigmoid()(gates_1)
+    local in_transform     = nn.Tanh()(gates_2)
+    local forget_gate      = nn.Sigmoid()(gates_3)
+    local out_gate         = nn.Sigmoid()(gates_4)
     -- perform the LSTM update
     local next_c           = nn.CAddTable()({
         nn.CMulTable()({forget_gate, prev_c}),
