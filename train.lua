@@ -24,6 +24,7 @@ require 'util.misc'
 local CharSplitLMMinibatchLoader = require 'util.CharSplitLMMinibatchLoader'
 local model_utils = require 'util.model_utils'
 local LSTM = require 'model.LSTM'
+local denseLSTM = require 'model.denseLSTM'
 local GRU = require 'model.GRU'
 local RNN = require 'model.RNN'
 
@@ -46,6 +47,8 @@ cmd:option('-decay_rate',0.95,'decay rate for rmsprop')
 cmd:option('-dropout',0,'dropout for regularization, used after each RNN hidden layer. 0 = no dropout')
 cmd:option('-seq_length',50,'number of timesteps to unroll for')
 cmd:option('-batch_size',50,'number of sequences to train on in parallel')
+cmd:option('-fudge_factor',1,'fudge the non-recurrent params by this amount')
+cmd:option('-fudge_recurrent',1,'fudge the recurrent params by this amount')
 cmd:option('-max_epochs',50,'number of full passes through the training data')
 cmd:option('-grad_clip',5,'clip gradients at this value')
 cmd:option('-train_frac',0.95,'fraction of data that goes into train set')
@@ -148,6 +151,8 @@ else
         protos.rnn = LSTM.lstm(vocab_size, opt.rnn_size, opt.num_layers, opt.dropout)
     elseif opt.model == 'gru' then
         protos.rnn = GRU.gru(vocab_size, opt.rnn_size, opt.num_layers, opt.dropout)
+    elseif opt.model == 'denselstm' then
+        protos.rnn = denseLSTM.denselstm(vocab_size, opt.rnn_size, opt.num_layers, opt.dropout)
     elseif opt.model == 'rnn' then
         protos.rnn = RNN.rnn(vocab_size, opt.rnn_size, opt.num_layers, opt.dropout)
     end
@@ -164,6 +169,9 @@ for L=1,opt.num_layers do
     if opt.model == 'lstm' then
         table.insert(init_state, h_init:clone())
     end
+    if opt.model == 'denselstm' then
+        table.insert(init_state, h_init:clone())
+    end
 end
 
 -- ship the model to the GPU if desired
@@ -176,13 +184,18 @@ end
 
 -- put the above things into one flattened parameters tensor
 params, grad_params = model_utils.combine_all_parameters(protos.rnn)
+-- fudge for assumption of huge net. yes, it's stupid
+params[torch.le(params, 0.8)] = params[torch.le(params, 0.8)] * opt.fudge_factor
+params[torch.ge(params, 0.8)] = ((params[torch.ge(params, 0.8)] - 1) * opt.fudge_recurrent) + 1
 
 -- initialization
-if do_random_init then
-    params:uniform(-0.08, 0.08) -- small uniform numbers
-end
+-- if do_random_init then
+--     params:uniform(0.9999, 1.0001)
+--     -- too lazy to do anything but for acdc???
+-- end
+
 -- initialize the LSTM forget gates with slightly higher biases to encourage remembering in the beginning
-if opt.model == 'lstm' then
+if opt.model == 'denselstm' then
     for layer_idx = 1, opt.num_layers do
         for _,node in ipairs(protos.rnn.forwardnodes) do
             if node.data.annotations.name == "i2h_" .. layer_idx then
@@ -194,7 +207,7 @@ if opt.model == 'lstm' then
     end
 end
 
-print('number of parameters in the model: ' .. params:nElement())
+-- print('number of parameters in the model: ' .. params:nElement())
 -- make a bunch of clones after flattening, as that reallocates memory
 clones = {}
 for name,proto in pairs(protos) do
@@ -366,7 +379,7 @@ for i = 1, iterations do
         break -- halt
     end
     if loss0 == nil then loss0 = loss[1] end
-    if loss[1] > loss0 * 3 then
+    if loss[1] > loss0 * 30 then
         print('loss is exploding, aborting.')
         break -- halt
     end
