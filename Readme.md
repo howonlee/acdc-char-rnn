@@ -1,7 +1,7 @@
 TIL of O(n log n * r) backprop
 ===
 
-Tl;dr: O(n log n * r) backprop where n is dominating number of nodes and r is number of layers exists already, made by the cool kids, and no-one seems to be running around with their hair on fire over this fact, for some reason. I think people should be running around with their hair on fire over this.
+Tl;dr: O(n log n * r) backprop where n is dominating number of nodes and r is number of layers exists already, made by the cool kids, and no-one seems to be running around with their hair on fire over this fact, for some reason. I think people should be running around with their hair on fire over this, so I rigged up A. Karpathy's [char-rnn](https://github.com/karpathy/char-rnn) to use it.
 
 In all histories of neural nets, the use of backpropagation is treated as an epochal event, because (and only because) they were a big enough speed optimization to enable practical usage. Construed as an application of dynamic programming on the deltas, it is easy to see why. Without it, getting the mere numerical gradient of the network per step in non-batch SGD is O(n^(2 * r)), where n is the dominating number of nodes and r is the number of layers in the network. With it, getting the gradient is O(r * n^2): a very big win. This is why people only use the numerical (non-backpropagation) gradient of multilayer perceptron to check their work, not for any practical purpose: because backpropagation is always better.
 
@@ -9,7 +9,7 @@ I noted while poking about the other day that there is another [big win](http://
 
 Basically, instead of creating an affine transform by a big matrix multiplication, an affine transform is approximated by layering on top of each other a vector multiplication, a cosine transform, another vector multiplication, and an inverse cosine transform. With convolutional nets, they replicate the CaffeNet's performance pretty well with pretty few layers, interspersed with nonlinearities and permutations. Since the vectors are sized to O(n), the time taken is dominated by the cosine transform, which is done by FFT. (So dynamic programming and divide and conquer at the same time, if you think about it!)
 
-Remarkably, they have put their code online, too, so I poked about at creating an absurdly huge recurrent neural net, as they actually suggest. There's a lot of phase transition-like happenings in neural network phenomena where the pseudo-order parameter is the dimension of the activations, not necessarily of the parameters. Moreover, in the empirical poking around that people do, the representational power of the LSTM seems to be much more [extensive](https://arxiv.org/pdf/1602.02410v2.pdf) in nature than non-LSTM RNN's: that is, you can crank up the size a lot, it will help as long as you crank up that size.
+Remarkably, they have put their [code online](https://github.com/mdenil/acdc-torch), too, so I poked about at creating an absurdly huge recurrent neural net, as they actually suggest. There's a lot of phase transition-like happenings in neural network phenomena where the pseudo-order parameter is the dimension of the activations, not necessarily of the parameters. Moreover, in the empirical poking around that people do, the representational power of the LSTM seems to be much more [extensive](https://arxiv.org/pdf/1602.02410v2.pdf) in nature than non-LSTM RNN's: that is, you can crank up the size a lot, it will help as long as you crank up that size.
 
 I tend to believe that criticality has something to do with it (the argument goes: nonvanishing gradient looks mighty like critical slowing down, so there should be an analogous correlation length divergence to be found somewhere, even though the "lattice" is weird -- hey, look at that extensivity), but I should probably keep my mouth shut until there's some code to back it up. One undoubtedly-premature prediction: you should be able to crank up the size of individual layers of highway net a lot for the same reason. That is, huge but only 2-layer highway nets may work strangely well: definitely going to try this soon.
 
@@ -28,6 +28,7 @@ Remember when comparing to huge dense LSTM that obnoxious model sizes will lead 
 
 I installed this on two separate boxes and suffice it to say that it will generally be really fiddly. Email me (hleehowon at the big search company's webmail) if you have trouble, you hear? Or if you want to yell at me: this is also acceptable.
 
-## License
+License
+===
 
 MIT, because Karpathy's char-rnn was MIT
